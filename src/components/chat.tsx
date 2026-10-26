@@ -8,15 +8,23 @@ import {
   NOT_COVERED,
   PRIVACY_REFUSAL,
 } from "@/mastra/processors/policy-guards";
-import { type PolicySection, renderCitations } from "./citations";
 
-// one section returned by the searchPolicy tool
-type Section = PolicySection & {
+// one section returned by the search agent's searchPolicy tool
+type Retrieved = {
+  section: string;
+  heading: string;
+  text: string;
   score: number | null; // set when vector search found it
   via: string | null; // set when a link brought it in, e.g. "4.3 cites 8"
 };
 
 const HR_EMAIL = "hr@xyz-company.example"; // Section 11.2
+
+// leave-policy-agent reads the whole policy, leave-policy-rag-agent searches it
+const AGENTS = [
+  { id: "leave-policy-agent", label: "Full policy" },
+  { id: "leave-policy-rag-agent", label: "Search" },
+];
 
 // one group per requirement, so each case can be shown in one click
 const PRESETS = [
@@ -55,31 +63,42 @@ const STARTERS = [
   "Why is my colleague on medical leave?",
 ];
 
-export function Chat() {
-  // "New chat" swaps the thread id, which remounts the window with no messages
-  const [threadId, setThreadId] = useState(() => crypto.randomUUID());
+export function Chat({ ragEnabled }: { ragEnabled: boolean }) {
+  // a new thread id (New chat, or switching agent) remounts the window empty
+  const [session, setSession] = useState(() => ({
+    agentId: AGENTS[0].id,
+    threadId: crypto.randomUUID(),
+  }));
+  const startChat = (agentId: string) =>
+    setSession({ agentId, threadId: crypto.randomUUID() });
+
   return (
-    // the Mastra API is served from this app, at /api/[...mastra]
-    <MastraReactProvider baseUrl="">
+    // served by this app, at /api/agents/[agentId]/stream
+    <MastraReactProvider>
       <ChatWindow
-        key={threadId}
-        threadId={threadId}
-        onNewChat={() => setThreadId(crypto.randomUUID())}
+        key={session.threadId}
+        {...session}
+        agents={ragEnabled ? AGENTS : AGENTS.slice(0, 1)}
+        onStart={startChat}
       />
     </MastraReactProvider>
   );
 }
 
 function ChatWindow({
+  agentId,
   threadId,
-  onNewChat,
+  agents,
+  onStart,
 }: {
+  agentId: string;
   threadId: string;
-  onNewChat: () => void;
+  agents: typeof AGENTS;
+  onStart: (agentId: string) => void;
 }) {
   const [input, setInput] = useState("");
   const { messages, sendMessage, isRunning, cancelRun } = useChat({
-    agentId: "leave-policy-agent",
+    agentId,
     threadId,
   });
   const waiting = isRunning && messages.at(-1)?.role === "user";
@@ -160,11 +179,30 @@ function ChatWindow({
               {isRunning ? "Checking the policy..." : "Online"}
             </p>
           </div>
+          {agents.length > 1 && (
+            <fieldset
+              aria-label="How the assistant reads the policy"
+              className="ml-auto flex rounded-lg bg-slate-100 p-0.5 text-xs font-medium"
+            >
+              {agents.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  aria-pressed={a.id === agentId}
+                  onClick={() => a.id !== agentId && onStart(a.id)}
+                  disabled={isRunning}
+                  className={`rounded-md px-2.5 py-1 ${a.id === agentId ? "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </fieldset>
+          )}
           <button
             type="button"
-            onClick={onNewChat}
+            onClick={() => onStart(agentId)}
             disabled={messages.length === 0}
-            className="ml-auto rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            className={`${agents.length > 1 ? "" : "ml-auto "}rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40`}
           >
             New chat
           </button>
@@ -281,12 +319,13 @@ function Answer({ message }: { message: MastraDBMessage }) {
   const parts = message.content.parts;
   const text = textOf(parts);
 
+  // only the search agent has these: what its searchPolicy tool returned
   const sections = parts.flatMap((p) =>
     p.type === "tool-invocation"
-      ? ((p.toolInvocation.result as { sections?: Section[] })?.sections ?? [])
+      ? ((p.toolInvocation.result as { sections?: Retrieved[] })?.sections ??
+        [])
       : [],
   );
-  const { nodes, cited } = renderCitations(text, sections);
 
   if (!text) return <Typing />;
 
@@ -309,7 +348,7 @@ function Answer({ message }: { message: MastraDBMessage }) {
           </Tag>
         )}
         <p className="whitespace-pre-wrap rounded-2xl rounded-tl-md bg-slate-100 px-4 py-2.5 text-sm leading-6 text-slate-800">
-          {nodes}
+          {text}
         </p>
 
         {notCovered && (
@@ -320,23 +359,6 @@ function Answer({ message }: { message: MastraDBMessage }) {
             </a>{" "}
             (Section 11.2)
           </p>
-        )}
-
-        {cited.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-slate-400">Sources</span>
-            {cited.map((s) => (
-              <span
-                key={s.section}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
-              >
-                <span className="font-semibold text-brand-600">
-                  §{s.section}
-                </span>
-                <span className="text-slate-600">{s.heading}</span>
-              </span>
-            ))}
-          </div>
         )}
 
         {sections.length > 0 && (

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Suspense } from "react";
 import { Chat } from "@/components/chat";
+import { RAG_ENABLED } from "@/mastra";
 
 export default function Home() {
   return (
@@ -34,7 +35,7 @@ export default function Home() {
       <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 px-4 py-4">
         {/* chat creates a fresh thread id per visit, so it can't be prerendered */}
         <Suspense>
-          <Chat />
+          <Chat ragEnabled={RAG_ENABLED} />
         </Suspense>
       </main>
     </div>

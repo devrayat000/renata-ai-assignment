@@ -40,7 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local SQLite db (policy vectors + chat memory), created by bun run ingest
+# local SQLite db (chat memory, plus policy vectors from bun run ingest)
 /data/*.db*
+
+# assessment brief, email and original policy PDF: not to be shared
+/context/
 
 !.env.example

@@ -1,10 +1,9 @@
-// PDF -> data/leave-policy.md -> one chunk per section -> embeddings + graph.
+// data/leave-policy.md -> one chunk per section -> embeddings + graph.
 // Run before starting the app: bun run ingest
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { embedMany } from "ai";
 import { chunkPolicy } from "../src/mastra/rag/chunk-policy";
-import { pdfToMarkdown } from "../src/mastra/rag/pdf-to-markdown";
 import { findEdges } from "../src/mastra/rag/policy-graph";
 import {
   DIMENSION,
@@ -14,9 +13,8 @@ import {
   policyStore,
 } from "../src/mastra/rag/store";
 
-const pdf = await readFile("data/leave-policy.pdf");
-const markdown = await pdfToMarkdown(new Uint8Array(pdf));
-await writeFile("data/leave-policy.md", markdown);
+// the policy PDF as Markdown, checked by hand against the original
+const markdown = await readFile("data/leave-policy.md", "utf8");
 
 const sections = await chunkPolicy(markdown);
 const edges = findEdges(sections);
