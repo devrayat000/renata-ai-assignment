@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local SQLite db (policy vectors + chat memory), created by bun run ingest
+/data/*.db*
+
+!.env.example
