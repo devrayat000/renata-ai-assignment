@@ -4,6 +4,7 @@ import { NOT_COVERED, PRIVACY_REFUSAL } from "../processors/policy-guards";
 // text comes from: the whole document, or the sections a search returns.
 export const ANSWER_RULES = `1. If the policy answers the question:
    - Answer briefly and plainly, using only what the policy says.
+   - Write plain text only: no Markdown, bold, headings or bullet lists. The chat shows replies as they are.
    - Never add a rule, number, deadline or exception that is not written there.
    - You may combine rules and do simple arithmetic with them, e.g. count which days in a date range are leave days under Section 5.
    - Cite the section for every point, like "(Section 4.3)". Every answer must cite at least one section.
