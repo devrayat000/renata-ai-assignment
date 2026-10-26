@@ -2,7 +2,9 @@
 
 A chat assistant that answers employee questions using only the XYZ Company Leave Policy (HR-POL-004, v2.0). It cites the section behind every answer, replies "I don't know, please contact HR." when the policy doesn't cover a question, and refuses to share other employees' leave details.
 
-Built with Next.js, Tailwind, [Mastra](https://mastra.ai) and Gemini 2.5 Flash.
+**Live:** <https://ai.renata.rayat.dev/>
+
+Built with Next.js, Tailwind, [Mastra](https://mastra.ai) and Gemini 3.7 Flash.
 
 ## Running it
 
@@ -20,11 +22,10 @@ The quick tests in the sidebar cover the three requirements: questions the polic
 
 ## Design decision: attach the whole policy
 
-The policy is a 6-page PDF (`public/leave-policy.pdf`). Gemini reads PDFs directly, so the default agent (`src/mastra/agents/leave-policy-agent.ts`) attaches it to every request as context (it isn't saved in chat memory; on Vercel it's sent as its public URL and Gemini fetches it) and the model writes the answer and its section citations from it:
+The policy is a 6-page PDF (`public/leave-policy.pdf`) and Gemini reads PDFs directly. So the default agent (`src/mastra/agents/leave-policy-agent.ts`) attaches the PDF to every request, and the model writes the answer and its section citations from it. The PDF is passed as context, so it isn't saved in chat memory. Locally it's read from disk; on Vercel it's sent as its public URL and Gemini fetches it.
 
-- Nothing has to be retrieved, so no relevant section can be missed. This matters for questions that need two sections at once, such as "Thursday to Sunday, how many leave days?" (Section 4.1 and Section 5).
+- Nothing has to be retrieved, so no relevant section can be missed. This matters for questions that need two sections at once, such as "Thursday to Sunday, how many leave days?" (Sections 4.1 and 5).
 - No conversion, vector database, embedding step or ingest.
-- Gemini caches the repeated input, so follow-up questions are cheap.
 
 ### The alternative: search + policy graph
 
@@ -43,7 +44,7 @@ bun dev        # a "Full policy / Search" switch appears in the chat header
 
 ### Comparing them
 
-`bun run eval` runs 25 fixed questions through the default agent; `bun run eval all` runs them through both. Each answer is checked against the three requirements, and the results are written to `docs/eval-results.md`.
+`bun run eval` runs 25 fixed questions through the default agent; `bun run eval all` runs them through both (run `bun run ingest` first). Each answer is checked against the three requirements, and the results are written to `docs/eval-results.md`.
 
 ## How each requirement is enforced
 
@@ -55,19 +56,23 @@ Both agents share the same rules (`src/mastra/agents/rules.ts`) and guards (`src
 | 2. Admit when it isn't covered | Rules: reply exactly `I don't know, please contact HR.`, with no guessing or general knowledge. An output processor cuts anything the model adds after that sentence. |
 | 3. Protect other employees' data | Rules: refuse with a fixed, polite reply that points to Section 9 and the HR Department. Questions about the user's own records get rule 2, since the assistant has no records. |
 
-The app serves one API route, `src/app/api/agents/[agentId]/stream/route.ts`. It accepts only our agents and rebuilds the request body from the user's question and thread id, so callers can't override the instructions, model or tools, or read other people's chats.
+The app serves a single API route, `src/app/api/agents/[agentId]/stream/route.ts`. The rest of the Mastra API (listing chat threads, agent settings, running tools) isn't exposed.
 
 ## Deploying
 
-On Vercel, use a [Turso](https://turso.tech) database for chat memory, since the serverless filesystem is read-only. Set these environment variables:
+The live version runs on Vercel. Because the serverless filesystem is read-only, chat memory goes in a [Turso](https://turso.tech) database. Set these environment variables:
 
 - `GOOGLE_GENERATIVE_AI_API_KEY`
 - `TURSO_DATABASE_URL`
 - `TURSO_AUTH_TOKEN`
 - for the search agent: `ENABLE_RAG_AGENT=true`, and run `bun run ingest` once with the Turso variables set
 
+Vercel sets `VERCEL_PROJECT_PRODUCTION_URL` itself; the agent uses it to build the PDF's public URL. Gemini has to be able to fetch that URL, so turn off Deployment Protection for production.
+
 ## Limitations
 
 - Whether a question is about another employee is decided by the model, not by a rule in code.
+- The stream route passes the request body to Mastra as it is, so someone calling the API directly (not through the UI) could send their own instructions. It also serves the search agent when `ENABLE_RAG_AGENT` is off, since that flag only hides the switch in the UI.
+- Answers take about 10 seconds in production, against about 5 locally.
 - The eval checks compliance (right section cited, exact fallback, refusal), not every detail of every answer.
 - The search agent needs the policy as Markdown, converted by hand, and its graph links are found with patterns written for this policy ("see Section X", the summary table, leave type names).
