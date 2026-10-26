@@ -5,6 +5,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Renata blue, taken from the logo (#0e4194) */
+@theme {
+  --color-brand-50: #eef3fb;
+  --color-brand-100: #d9e4f5;
+  --color-brand-200: #b3c8ea;
+  --color-brand-300: #7f9fd6;
+  --color-brand-500: #2a5db3;
+  --color-brand-600: #0e4194;
+  --color-brand-700: #0b3577;
+  --color-brand-800: #09295c;
+  --color-brand-900: #071f45;
+}
+
 body {
-  @apply bg-slate-50 font-sans text-slate-900;
+  @apply bg-slate-100 font-sans text-slate-900;
+}
+
+@keyframes typing {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }

@@ -1,6 +1,9 @@
 import type { Processor } from "@mastra/core/processors";
 
 export const NOT_COVERED = "I don't know, please contact HR.";
+// first sentence of the refusal for questions about another employee
+export const PRIVACY_REFUSAL =
+  "Sorry, I can't share another employee's leave details.";
 
 // Every reply has to come from the policy, so the first step always searches it.
 export const searchFirst = {

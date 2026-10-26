@@ -40,7 +40,7 @@ Open <http://localhost:3000>.
 - `@mastra/next` serves the Mastra API under `/api`. The UI streams replies with `useChat` from `@mastra/react`. Chat memory keeps the last 10 messages.
 - Two processors (`src/mastra/processors/policy-guards.ts`) back up the agent's instructions. One makes the agent search the policy before answering. The other cuts anything the model adds after `I don't know, please contact HR.`, so that reply is always exactly that string.
 
-The UI shows a badge for each section cited in the answer, the graph nodes the tool returned and why, and one-click questions for the three cases: an in-policy question, a question the policy doesn't cover, and a request for a colleague's data.
+The UI shows a badge for each section cited in the answer, the graph nodes the tool returned and why, and one-click questions for the three cases: an in-policy question, a question the policy doesn't cover, and a request for a colleague's data. The "not covered" and "confidential" replies are labelled so they're easy to tell apart. The Renata PLC logos in `public/brand/` were cut from the assessment PDF.
 
 ## Limitations
 

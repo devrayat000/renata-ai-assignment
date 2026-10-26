@@ -44,7 +44,7 @@ function Chip({ cite }: { cite: Cite }) {
     <span className="group relative inline-block align-baseline">
       <button
         type="button"
-        className="mx-0.5 inline-flex items-center rounded-md bg-blue-50 px-1.5 py-px text-[11px] font-medium text-blue-700 ring-1 ring-blue-200 ring-inset hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+        className="mx-0.5 inline-flex items-center rounded-md bg-brand-50 px-1.5 py-px text-[11px] font-medium text-brand-700 ring-1 ring-brand-200 ring-inset hover:bg-brand-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
         §{cite.label}
       </button>

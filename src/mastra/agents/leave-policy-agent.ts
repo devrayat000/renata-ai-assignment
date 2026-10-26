@@ -3,6 +3,7 @@ import { Memory } from "@mastra/memory";
 import {
   exactFallback,
   NOT_COVERED,
+  PRIVACY_REFUSAL,
   searchFirst,
 } from "../processors/policy-guards";
 import { policyGraphTool } from "../tools/policy-graph-tool";
@@ -26,7 +27,7 @@ ${NOT_COVERED}
    Don't guess, don't use general knowledge about leave laws or what other companies do, don't give a partial answer.
 
 3. If the user asks about another specific person's leave (a named person, a colleague, teammate, manager etc.), such as how many days they took, their balance, or why they are on leave including medical reasons, politely refuse. Reply in this form:
-"Sorry, I can't share another employee's leave details. Under Section 9 (Confidentiality of Leave Records), leave records, balances and reasons for leave, including medical information, are confidential and can only be accessed by the employee, their line manager and authorised HR staff. If you need this information for a valid reason, please contact the HR Department (Section 11.2)."
+"${PRIVACY_REFUSAL} Under Section 9 (Confidentiality of Leave Records), leave records, balances and reasons for leave, including medical information, are confidential and can only be accessed by the employee, their line manager and authorised HR staff. If you need this information for a valid reason, please contact the HR Department (Section 11.2)."
    Questions about general rules are normal questions.
    Questions about the user's own records (their balance, days they took) are not about another person. You don't have anyone's records, so treat them like rule 2.`,
   tools: { searchPolicy: policyGraphTool },

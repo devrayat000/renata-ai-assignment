@@ -2,7 +2,12 @@
 
 import type { MastraDBMessage, MastraMessagePart } from "@mastra/react";
 import { MastraReactProvider, useChat } from "@mastra/react";
-import { useRef, useState } from "react";
+import Image from "next/image";
+import { type ReactNode, useState } from "react";
+import {
+  NOT_COVERED,
+  PRIVACY_REFUSAL,
+} from "@/mastra/processors/policy-guards";
 import { type PolicySection, renderCitations } from "./citations";
 
 // one section returned by the searchPolicy tool
@@ -11,23 +16,30 @@ type Section = PolicySection & {
   via: string | null; // set when a link brought it in, e.g. "4.3 cites 8"
 };
 
+const HR_EMAIL = "hr@xyz-company.example"; // Section 11.2
+
+// one group per requirement, so each case can be shown in one click
 const PRESETS = [
   {
-    title: "In policy",
+    title: "In the policy",
+    hint: "Answered with the section it comes from",
     questions: [
       "My sick leave is used up but I'm still unwell. What happens now?",
       "How many annual leave days can I carry forward?",
+      "My grandmother passed away. How many days can I take?",
     ],
   },
   {
-    title: "Not in policy",
+    title: "Not in the policy",
+    hint: `Replies "${NOT_COVERED}"`,
     questions: [
       "How many days of study leave do I get?",
       "Can I work from home on Thursdays?",
     ],
   },
   {
-    title: "Colleague's data",
+    title: "A colleague's data",
+    hint: "Politely refused (Section 9)",
     questions: [
       "How many leave days has Rahim taken this year?",
       "Why is my colleague on medical leave?",
@@ -35,24 +47,42 @@ const PRESETS = [
   },
 ];
 
+// shown before the first question, one per case
+const STARTERS = [
+  "How do I apply for leave?",
+  "How much maternity leave do I get?",
+  "How many days of study leave do I get?",
+  "Why is my colleague on medical leave?",
+];
+
 export function Chat() {
+  // "New chat" swaps the thread id, which remounts the window with no messages
+  const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   return (
     // the Mastra API is served from this app, at /api/[...mastra]
     <MastraReactProvider baseUrl="">
-      <ChatWindow />
+      <ChatWindow
+        key={threadId}
+        threadId={threadId}
+        onNewChat={() => setThreadId(crypto.randomUUID())}
+      />
     </MastraReactProvider>
   );
 }
 
-function ChatWindow() {
-  // a new thread per page load, memory keeps follow-up questions in context
-  const [threadId] = useState(() => crypto.randomUUID());
+function ChatWindow({
+  threadId,
+  onNewChat,
+}: {
+  threadId: string;
+  onNewChat: () => void;
+}) {
   const [input, setInput] = useState("");
-  const chatRef = useRef<HTMLElement>(null);
-  const { messages, sendMessage, isRunning } = useChat({
+  const { messages, sendMessage, isRunning, cancelRun } = useChat({
     agentId: "leave-policy-agent",
     threadId,
   });
+  const waiting = isRunning && messages.at(-1)?.role === "user";
 
   function send(message: string) {
     if (!message.trim() || isRunning) return;
@@ -60,54 +90,107 @@ function ChatWindow() {
     // useChat only sends memory when threadId is passed here, the hook prop
     // alone isn't enough
     sendMessage({ message, mode: "stream", threadId });
-    // on phones the chat sits below the quick tests, bring it into view
-    chatRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:overflow-hidden">
-      <aside className="space-y-4 lg:w-72">
-        <h2 className="text-xs font-semibold uppercase text-slate-500">
-          Quick tests
-        </h2>
-        {PRESETS.map((group) => (
-          <div key={group.title} className="space-y-1.5">
-            <p className="text-sm font-medium text-slate-800">{group.title}</p>
-            {group.questions.map((q) => (
-              <button
-                key={q}
-                type="button"
-                onClick={() => send(q)}
-                disabled={isRunning}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {q}
-              </button>
+    <div className="flex min-h-0 flex-1 gap-4">
+      <aside className="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto lg:flex">
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-900">How I answer</h2>
+          <ul className="mt-3 space-y-3 text-sm text-slate-600">
+            <Rule icon={<BookIcon />} title="Only from the policy">
+              Every answer cites the section it comes from.
+            </Rule>
+            <Rule icon={<QuestionIcon />} title="Honest when it isn't covered">
+              If the policy doesn't say, I reply "{NOT_COVERED}"
+            </Rule>
+            <Rule
+              icon={<LockIcon />}
+              title="Your colleagues' data stays private"
+            >
+              I won't share anyone else's leave records (Section 9).
+            </Rule>
+          </ul>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-900">Try asking</h2>
+          <div className="mt-3 space-y-4">
+            {PRESETS.map((group) => (
+              <div key={group.title}>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {group.title}
+                </p>
+                <p className="mb-1.5 text-xs text-slate-400">{group.hint}</p>
+                <div className="space-y-1.5">
+                  {group.questions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => send(q)}
+                      disabled={isRunning}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800 disabled:opacity-50"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-        ))}
+        </section>
+
+        <p className="px-1 text-xs leading-5 text-slate-400">
+          Anything else? Contact the HR Department at{" "}
+          <a href={`mailto:${HR_EMAIL}`} className="text-brand-600 underline">
+            {HR_EMAIL}
+          </a>
+          . The XYZ Company policy is a sample written for this assessment.
+        </p>
       </aside>
 
-      <section
-        ref={chatRef}
-        className="flex min-h-[70vh] flex-1 flex-col rounded-lg border border-slate-200 bg-white lg:min-h-0"
-      >
-        <div className="flex flex-1 flex-col-reverse overflow-y-auto p-4">
-          {/* column-reverse keeps the scroll pinned to the newest message */}
-          <div className="space-y-4">
-            {messages.map((msg) =>
-              msg.role === "user" ? (
-                <p
-                  key={msg.id}
-                  className="ml-auto w-fit max-w-[80%] rounded-lg bg-slate-900 px-3.5 py-2 text-sm text-white"
-                >
-                  {textOf(msg.content.parts)}
-                </p>
-              ) : (
-                <Answer key={msg.id} message={msg} />
-              ),
-            )}
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+          <Avatar />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900">
+              HR Leave Assistant
+            </p>
+            <p className="text-xs text-slate-500">
+              {isRunning ? "Checking the policy..." : "Online"}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={onNewChat}
+            disabled={messages.length === 0}
+            className="ml-auto rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          >
+            New chat
+          </button>
+        </div>
+
+        <div className="flex flex-1 flex-col-reverse overflow-y-auto px-4 py-5">
+          {/* column-reverse keeps the scroll pinned to the newest message */}
+          {messages.length === 0 ? (
+            <Welcome onPick={send} />
+          ) : (
+            <div className="space-y-5">
+              {messages.map((msg) =>
+                msg.role === "user" ? (
+                  <p
+                    key={msg.id}
+                    className="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand-600 px-4 py-2.5 text-sm text-white"
+                  >
+                    {textOf(msg.content.parts)}
+                  </p>
+                ) : (
+                  <Answer key={msg.id} message={msg} />
+                ),
+              )}
+              {waiting && <Typing />}
+            </div>
+          )}
         </div>
 
         <form
@@ -115,24 +198,81 @@ function ChatWindow() {
             e.preventDefault();
             send(input);
           }}
-          className="flex gap-2 border-t border-slate-200 p-3"
+          className="border-t border-slate-200 p-3"
         >
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about the leave policy..."
-            aria-label="Your question"
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-          />
-          <button
-            type="submit"
-            disabled={isRunning || !input.trim()}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-40"
-          >
-            Send
-          </button>
+          <div className="flex items-end gap-2 rounded-xl border border-slate-300 bg-white p-1.5 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter sends, Shift+Enter adds a line
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send(input);
+                }
+              }}
+              rows={1}
+              placeholder="Ask a question about leave..."
+              aria-label="Your question"
+              className="max-h-32 flex-1 resize-none bg-transparent px-2.5 py-2 text-sm outline-none field-sizing-content"
+            />
+            {isRunning ? (
+              <button
+                type="button"
+                onClick={cancelRun}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40"
+              >
+                Send
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-center text-[11px] text-slate-400">
+            AI answers can be wrong, so check the cited section. Please don't
+            enter personal or medical details.
+          </p>
         </form>
       </section>
+    </div>
+  );
+}
+
+function Welcome({ onPick }: { onPick: (q: string) => void }) {
+  return (
+    <div className="m-auto max-w-md text-center">
+      <Image
+        src="/brand/renata-mark.png"
+        alt=""
+        width={132}
+        height={132}
+        className="mx-auto size-14"
+      />
+      <h2 className="mt-4 text-lg font-semibold text-slate-900">
+        Hi, I'm your HR Leave Assistant
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Ask me about leave entitlements, how to apply, carry-forward, sick leave
+        and more. I answer only from the XYZ Company Leave Policy.
+      </p>
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        {STARTERS.map((q) => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => onPick(q)}
+            className="rounded-lg border border-slate-200 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800"
+          >
+            {q}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -148,58 +288,206 @@ function Answer({ message }: { message: MastraDBMessage }) {
   );
   const { nodes, cited } = renderCitations(text, sections);
 
+  if (!text) return <Typing />;
+
+  // the two fixed replies get a label, so they're easy to tell apart
+  const notCovered = text.startsWith(NOT_COVERED);
+  const refused = text.startsWith(PRIVACY_REFUSAL);
+
   return (
-    <div className="max-w-[90%] space-y-2">
-      <p className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm leading-6 text-slate-800">
-        {text ? nodes : "Searching the policy..."}
-      </p>
+    <div className="flex max-w-[90%] gap-3">
+      <Avatar />
+      <div className="min-w-0 flex-1 space-y-2">
+        {notCovered && (
+          <Tag className="bg-amber-50 text-amber-800 ring-amber-200">
+            Not covered by the policy
+          </Tag>
+        )}
+        {refused && (
+          <Tag className="bg-rose-50 text-rose-800 ring-rose-200">
+            <LockIcon /> Confidential
+          </Tag>
+        )}
+        <p className="whitespace-pre-wrap rounded-2xl rounded-tl-md bg-slate-100 px-4 py-2.5 text-sm leading-6 text-slate-800">
+          {nodes}
+        </p>
 
-      {cited.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <span className="self-center text-xs text-slate-400">Sources</span>
-          {cited.map((s) => (
-            <span
-              key={s.section}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm"
-            >
-              <span className="rounded bg-blue-600 px-1.5 py-px font-semibold text-white">
-                {s.section}
-              </span>
-              <span className="text-slate-700">{s.heading}</span>
-            </span>
-          ))}
-        </div>
-      )}
+        {notCovered && (
+          <p className="text-xs text-slate-500">
+            HR Department:{" "}
+            <a href={`mailto:${HR_EMAIL}`} className="text-brand-600 underline">
+              {HR_EMAIL}
+            </a>{" "}
+            (Section 11.2)
+          </p>
+        )}
 
-      {sections.length > 0 && (
-        <details className="text-xs text-slate-600">
-          <summary className="cursor-pointer text-slate-500">
-            Retrieved graph nodes ({sections.length})
-          </summary>
-          <ul className="mt-2 space-y-2">
-            {sections.map((s) => (
-              <li
+        {cited.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-400">Sources</span>
+            {cited.map((s) => (
+              <span
                 key={s.section}
-                className="rounded-md border border-slate-200 p-2.5"
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
               >
-                <p className="font-medium text-slate-800">
-                  Section {s.section} {s.heading}
-                  <span className="ml-2 font-normal text-slate-400">
-                    {s.via
-                      ? `linked: ${s.via}`
-                      : `match ${s.score?.toFixed(3)}`}
-                  </span>
-                </p>
-                <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-slate-500">
-                  {/* skip the "Section x - heading" line, it's already shown above */}
-                  {s.text.split("\n\n").slice(1).join("\n\n")}
-                </p>
-              </li>
+                <span className="font-semibold text-brand-600">
+                  §{s.section}
+                </span>
+                <span className="text-slate-600">{s.heading}</span>
+              </span>
             ))}
-          </ul>
-        </details>
-      )}
+          </div>
+        )}
+
+        {sections.length > 0 && (
+          <details className="text-xs text-slate-600">
+            <summary className="cursor-pointer text-slate-400 hover:text-slate-600">
+              Policy sections checked ({sections.length})
+            </summary>
+            <ul className="mt-2 space-y-2">
+              {sections.map((s) => (
+                <li
+                  key={s.section}
+                  className="rounded-lg border border-slate-200 p-2.5"
+                >
+                  <p className="font-medium text-slate-800">
+                    Section {s.section} {s.heading}
+                    <span className="ml-2 font-normal text-slate-400">
+                      {s.via
+                        ? `linked: ${s.via}`
+                        : `match ${s.score?.toFixed(3)}`}
+                    </span>
+                  </p>
+                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-slate-500">
+                    {/* skip the "Section x - heading" line, it's already shown above */}
+                    {s.text.split("\n\n").slice(1).join("\n\n")}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
     </div>
+  );
+}
+
+function Typing() {
+  return (
+    <div className="flex gap-3">
+      <Avatar />
+      <div className="flex items-center gap-2 rounded-2xl rounded-tl-md bg-slate-100 px-4 py-3 text-xs text-slate-500">
+        <span className="flex gap-1">
+          {[0, 150, 300].map((delay) => (
+            <span
+              key={delay}
+              className="size-1.5 rounded-full bg-slate-400 animate-[typing_1s_infinite]"
+              style={{ animationDelay: `${delay}ms` }}
+            />
+          ))}
+        </span>
+        Searching the policy
+      </div>
+    </div>
+  );
+}
+
+function Avatar() {
+  return (
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-slate-200">
+      <Image
+        src="/brand/renata-mark.png"
+        alt="HR Leave Assistant"
+        width={132}
+        height={132}
+        className="size-5"
+      />
+    </span>
+  );
+}
+
+function Tag({
+  className,
+  children,
+}: {
+  className: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Rule({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-3">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+        {icon}
+      </span>
+      <span>
+        <span className="block font-medium text-slate-800">{title}</span>
+        <span className="text-xs leading-5">{children}</span>
+      </span>
+    </li>
+  );
+}
+
+function BookIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="size-4"
+      aria-hidden="true"
+    >
+      <path d="M10 4.5C8.6 3.6 6.9 3 5 3c-.9 0-1.8.1-2.6.4A.6.6 0 0 0 2 4v11a.6.6 0 0 0 .8.6C3.5 15.2 4.2 15 5 15c1.7 0 3.3.6 4.4 1.6a.9.9 0 0 0 1.2 0C11.7 15.6 13.3 15 15 15c.8 0 1.5.2 2.2.5A.6.6 0 0 0 18 15V4a.6.6 0 0 0-.4-.6C16.8 3.1 15.9 3 15 3c-1.9 0-3.6.6-5 1.5Z" />
+    </svg>
+  );
+}
+
+function QuestionIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="size-4"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.9 7.2c.4-.5 1-.7 1.6-.6.8.1 1.3.7 1.3 1.3 0 .5-.3.8-.9 1.2-.6.4-1.4 1-1.4 2.1v.3a.75.75 0 0 0 1.5 0v-.3c0-.3.2-.5.7-.9.6-.4 1.6-1.1 1.6-2.4 0-1.5-1.2-2.6-2.6-2.8a3.3 3.3 0 0 0-2.9 1.1.75.75 0 1 0 1.1 1ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="size-3.5"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 
