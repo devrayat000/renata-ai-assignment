@@ -84,6 +84,6 @@ For that to work, Gemini must be able to download the file:
 
 - Whether a question is about another employee is decided by the model, not by a rule in code.
 - It isn't connected to any HR system, so it knows nothing about individual employees. "What's my leave balance?" gets "I don't know, please contact HR."
-- Answers often take 10 seconds or more in production, against about 5 locally.
+- Answers usually take about 5 seconds in production, but occasionally 20–40 seconds.
 - The eval checks compliance (right section cited, exact fallback, refusal), not every detail of every answer.
 - The search agent needs the policy as Markdown, converted by hand, and its graph links are found with patterns written for this policy ("see Section X", the summary table, leave type names).
