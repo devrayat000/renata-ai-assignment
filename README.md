@@ -4,7 +4,7 @@ A chat assistant that answers employee questions using only the XYZ Company Leav
 
 **Live:** <https://ai.renata.rayat.dev/>
 
-Built with Next.js, Tailwind, [Mastra](https://mastra.ai) and Gemini (3.7 Flash for the default agent, 2.5 Flash for the search agent).
+Built with Next.js, Tailwind, [Mastra](https://mastra.ai) and Gemini 3.7 Flash.
 
 The policy (`public/leave-policy.pdf`, and `data/leave-policy.md` for the search agent) is the sample document supplied with the assessment. It's included only so the app can run; please don't share it outside the assessment.
 

@@ -65,9 +65,9 @@ const CASES: { kind: string; q: string; check: Check }[] = [
     check: (text: string) => {
       if (text.startsWith(NOT_COVERED)) return "said not covered";
       if (text.startsWith(PRIVACY_REFUSAL)) return "refused";
-      // "Section 4.3", "Section 4.3 (d)", or "8.1" for section 8
+      // "Section 4.3", "4.3(d)", "4.3d", or "8.1" for section 8, not "14.3"
       const cited = sections.some((s) =>
-        new RegExp(`\\b${s.replace(".", "\\.")}\\b`).test(text),
+        new RegExp(`(?<![\\d.])${s.replace(".", "\\.")}(?!\\d)`).test(text),
       );
       return cited ? null : `no citation of ${sections.join(" or ")}`;
     },
