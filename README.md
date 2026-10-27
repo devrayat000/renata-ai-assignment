@@ -56,7 +56,7 @@ Both agents share the same rules (`src/mastra/agents/rules.ts`) and guards (`src
 | 2. Admit when it isn't covered | Rules: reply exactly `I don't know, please contact HR.`, with no guessing or general knowledge. An output processor cuts anything the model adds after that sentence. |
 | 3. Protect other employees' data | Rules: refuse with a fixed, polite reply that points to Section 9 and the HR Department. Questions about the user's own records get rule 2, since the assistant has no records. |
 
-The app serves a single API route, `src/app/api/agents/[agentId]/stream/route.ts`. The rest of the Mastra API (listing chat threads, agent settings, running tools) isn't exposed.
+The app serves a single API route, `src/app/api/agents/[agentId]/stream/route.ts`. It accepts only the enabled agents and passes on only the user's messages and thread id, so a caller can't send their own instructions, system messages or model settings. The rest of the Mastra API (listing chat threads, agent settings, running tools) isn't exposed.
 
 ## Deploying
 
@@ -72,7 +72,7 @@ Vercel sets `VERCEL_PROJECT_PRODUCTION_URL` itself; the agent uses it to build t
 ## Limitations
 
 - Whether a question is about another employee is decided by the model, not by a rule in code.
-- The stream route passes the request body to Mastra as it is, so someone calling the API directly (not through the UI) could send their own instructions. It also serves the search agent when `ENABLE_RAG_AGENT` is off, since that flag only hides the switch in the UI.
+- It isn't connected to any HR system, so it knows nothing about individual employees. "What's my leave balance?" gets "I don't know, please contact HR."
 - Answers take about 10 seconds in production, against about 5 locally.
 - The eval checks compliance (right section cited, exact fallback, refusal), not every detail of every answer.
 - The search agent needs the policy as Markdown, converted by hand, and its graph links are found with patterns written for this policy ("see Section X", the summary table, leave type names).
