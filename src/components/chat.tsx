@@ -1,9 +1,8 @@
 "use client";
 
-import type { MastraDBMessage, MastraMessagePart } from "@mastra/react";
-import { MastraReactProvider, useChat } from "@mastra/react";
+import { MastraClient } from "@mastra/client-js";
 import Image from "next/image";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
   NOT_COVERED,
   PRIVACY_REFUSAL,
@@ -16,6 +15,13 @@ type Retrieved = {
   text: string;
   score: number | null; // set when vector search found it
   via: string | null; // set when a link brought it in, e.g. "4.3 cites 8"
+};
+
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  sections: Retrieved[]; // search agent only
 };
 
 const HR_EMAIL = "hr@xyz-company.example"; // Section 11.2
@@ -64,51 +70,113 @@ const STARTERS = [
 ];
 
 export function Chat({ ragEnabled }: { ragEnabled: boolean }) {
-  // a new thread id (New chat, or switching agent) remounts the window empty
+  // a new key (New chat, or switching agent) remounts the window empty
   const [session, setSession] = useState(() => ({
     agentId: AGENTS[0].id,
-    threadId: crypto.randomUUID(),
+    key: crypto.randomUUID(),
   }));
   const startChat = (agentId: string) =>
-    setSession({ agentId, threadId: crypto.randomUUID() });
+    setSession({ agentId, key: crypto.randomUUID() });
 
   return (
-    // served by this app, at /api/agents/[agentId]/stream
-    <MastraReactProvider>
-      <ChatWindow
-        key={session.threadId}
-        {...session}
-        agents={ragEnabled ? AGENTS : AGENTS.slice(0, 1)}
-        onStart={startChat}
-      />
-    </MastraReactProvider>
+    <ChatWindow
+      key={session.key}
+      agentId={session.agentId}
+      agents={ragEnabled ? AGENTS : AGENTS.slice(0, 1)}
+      onStart={startChat}
+    />
   );
+}
+
+// The conversation lives here, in the browser, and goes with every question,
+// so the server keeps nothing between requests.
+function usePolicyChat(agentId: string) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  async function send(text: string) {
+    const question: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      text,
+      sections: [],
+    };
+    const reply: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      text: "",
+      sections: [],
+    };
+    const history = [...messages, question];
+    setMessages([...history, reply]);
+    setIsRunning(true);
+
+    const update = (change: (m: ChatMessage) => ChatMessage) =>
+      setMessages((all) => all.map((m) => (m.id === reply.id ? change(m) : m)));
+    const abort = new AbortController();
+    abortRef.current = abort;
+    try {
+      // served by this app, at /api/agents/[agentId]/stream
+      const agent = new MastraClient({
+        baseUrl: "",
+        abortSignal: abort.signal,
+      }).getAgent(agentId);
+      const response = await agent.stream(
+        history
+          .filter((m) => m.text)
+          .map(({ role, text }) =>
+            role === "user"
+              ? { role: "user" as const, content: text }
+              : { role: "assistant" as const, content: text },
+          ),
+      );
+      await response.processDataStream({
+        onChunk: async (chunk) => {
+          if (chunk.type === "text-delta") {
+            update((m) => ({ ...m, text: m.text + chunk.payload.text }));
+          }
+          if (chunk.type === "tool-result") {
+            const result = chunk.payload.result as { sections?: Retrieved[] };
+            update((m) => ({
+              ...m,
+              sections: [...m.sections, ...(result?.sections ?? [])],
+            }));
+          }
+        },
+      });
+    } catch {
+      if (!abort.signal.aborted) {
+        update((m) => ({
+          ...m,
+          text: m.text || "Something went wrong. Please try again.",
+        }));
+      }
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  return { messages, send, isRunning, stop: () => abortRef.current?.abort() };
 }
 
 function ChatWindow({
   agentId,
-  threadId,
   agents,
   onStart,
 }: {
   agentId: string;
-  threadId: string;
   agents: typeof AGENTS;
   onStart: (agentId: string) => void;
 }) {
   const [input, setInput] = useState("");
-  const { messages, sendMessage, isRunning, cancelRun } = useChat({
-    agentId,
-    threadId,
-  });
-  const waiting = isRunning && messages.at(-1)?.role === "user";
+  const chat = usePolicyChat(agentId);
+  const { messages, isRunning } = chat;
 
   function send(message: string) {
     if (!message.trim() || isRunning) return;
     setInput("");
-    // useChat only sends memory when threadId is passed here, the hook prop
-    // alone isn't enough
-    sendMessage({ message, mode: "stream", threadId });
+    chat.send(message.trim());
   }
 
   return (
@@ -220,13 +288,12 @@ function ChatWindow({
                     key={msg.id}
                     className="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand-600 px-4 py-2.5 text-sm text-white"
                   >
-                    {textOf(msg.content.parts)}
+                    {msg.text}
                   </p>
                 ) : (
                   <Answer key={msg.id} message={msg} />
                 ),
               )}
-              {waiting && <Typing />}
             </div>
           )}
         </div>
@@ -257,7 +324,7 @@ function ChatWindow({
             {isRunning ? (
               <button
                 type="button"
-                onClick={cancelRun}
+                onClick={chat.stop}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Stop
@@ -315,17 +382,10 @@ function Welcome({ onPick }: { onPick: (q: string) => void }) {
   );
 }
 
-function Answer({ message }: { message: MastraDBMessage }) {
-  const parts = message.content.parts;
-  const text = textOf(parts);
-
+function Answer({ message }: { message: ChatMessage }) {
+  const text = message.text.trim();
   // only the search agent has these: what its searchPolicy tool returned
-  const sections = parts.flatMap((p) =>
-    p.type === "tool-invocation"
-      ? ((p.toolInvocation.result as { sections?: Retrieved[] })?.sections ??
-        [])
-      : [],
-  );
+  const sections = message.sections;
 
   if (!text) return <Typing />;
 
@@ -511,11 +571,4 @@ function LockIcon() {
       />
     </svg>
   );
-}
-
-function textOf(parts: MastraMessagePart[]) {
-  return parts
-    .map((p) => (p.type === "text" ? p.text : ""))
-    .join("")
-    .trim();
 }

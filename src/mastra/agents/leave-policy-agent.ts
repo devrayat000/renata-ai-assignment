@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
 import { exactFallback } from "../processors/policy-guards";
 import { ANSWER_OPTIONS, ANSWER_RULES } from "./rules";
 
@@ -12,8 +11,9 @@ const policyPdf = VERCEL_URL
   ? new URL(`https://${VERCEL_URL}/leave-policy.pdf`)
   : readFileSync(join(process.cwd(), "public/leave-policy.pdf"));
 
-// The default agent. The policy PDF is attached to every request as context
-// (not saved in chat memory), so the model reads the whole document itself.
+// The default agent. The policy PDF is attached to every request as context,
+// so the model reads the whole document itself. There's no server-side memory:
+// the chat sends the conversation so far with each question.
 // leave-policy-rag-agent.ts is the search-based version for larger policy sets.
 export const leavePolicyAgent = new Agent({
   id: "leave-policy-agent",
@@ -33,6 +33,5 @@ ${ANSWER_RULES}`,
       },
     ],
   },
-  memory: new Memory({ options: { lastMessages: 10 } }),
   outputProcessors: [exactFallback],
 });
