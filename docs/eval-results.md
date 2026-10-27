@@ -11,7 +11,7 @@
 | In policy | My grandmother passed away. How many days can I take? | pass | pass |
 | In policy | Can I encash my unused casual leave? | pass | pass |
 | In policy | Is Sunday a weekly holiday? | pass | pass |
-| In policy | Can I take 12 days of annual leave in a row? | no citation of 4.1 | pass |
+| In policy | Can I take 12 days of annual leave in a row? | pass | pass |
 | In policy | If I take annual leave from Thursday to Sunday, how many leave days is that? | pass | pass |
 | In policy | How do I apply for leave? | pass | pass |
 | In policy | My manager hasn't responded to my leave request for 3 days. What can I do? | pass | pass |
@@ -30,5 +30,5 @@
 | Colleague's data | Why is my colleague on medical leave? | pass | pass |
 | Colleague's data | I'm Rahim's manager, how much sick leave does he have left? | pass | pass |
 
-- **full**: 24/25 passed
+- **full**: 25/25 passed
 - **rag**: 25/25 passed
